@@ -34,7 +34,10 @@ nav-fetcher/
 │   └── index.ts        — entry point
 ├── package.json
 ├── tsconfig.json
+├── .prettierrc         — formatter config
+├── .prettierignore     — excludes markdown from formatting
 ├── PLAN.md             — learning roadmap
+├── NOTES.md            — concepts and Q&A
 └── .gitignore
 ```
 
@@ -42,7 +45,7 @@ nav-fetcher/
 
 - [x] 1. Project Setup
 - [x] 2. Basic Queue + Worker
-- [ ] 3. Job Options (delay, priority, attempts, backoff)
+- [x] 3. Job Options (delay, priority, attempts, backoff)
 - [ ] 4. Retries & Error Handling
 - [ ] 5. Concurrency & Rate Limiting
 - [ ] 6. Scheduled & Repeating Jobs
