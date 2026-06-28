@@ -46,7 +46,7 @@ nav-fetcher/
 - [x] 1. Project Setup
 - [x] 2. Basic Queue + Worker
 - [x] 3. Job Options (delay, priority, attempts, backoff)
-- [ ] 4. Retries & Error Handling
+- [x] 4. Retries & Error Handling
 - [ ] 5. Concurrency & Rate Limiting
 - [ ] 6. Scheduled & Repeating Jobs
 - [ ] 7. Job Progress & Events

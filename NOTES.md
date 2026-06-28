@@ -114,3 +114,39 @@ For learning, yes. In production, split: queues/ (shared config), workers/ (proc
 
 ### What is `prev` in events?
 The previous state before the current transition. Tells you where the job came from — useful when a job can arrive at `waiting` from multiple paths (new, retry, delay expired).
+
+---
+
+## 4. Retries & Error Handling
+
+### Key Concepts
+
+- **`worker.on('failed')`** fires on **every** failed attempt (not just the last). Gives you `(job, err)`.
+- **`worker.on('error')`** fires for **worker infrastructure** issues (Redis disconnect, serialization errors). No job reference — just the error. You won't see it during normal job failures.
+- **`queue.getFailed()`** returns all jobs in the `failed` state (exhausted all attempts). Each job retains `failedReason`, `attemptsMade`, `stacktrace` (array, one per attempt), and full job data.
+- **`job.retry('failed')`** moves a failed job back to `waiting` for one more attempt. Does NOT reset `attemptsMade` — the counter continues (e.g., 3 → 4).
+- **Dead letter queue (DLQ)** — a separate queue where permanently failed jobs are moved for inspection, alerting, or batch reprocessing.
+
+### `worker.on('failed')` vs `queueEvents.on('failed')`
+
+| | `worker.on('failed')` | `queueEvents.on('failed')` |
+|---|---|---|
+| Fires | Every attempt | Only final failure |
+| Access | Full `job` object + `err` | `jobId` + `failedReason` string |
+| Use case | Per-attempt logging, DLQ routing | External monitoring, alerting |
+
+### Manual Retry Behavior
+
+- `job.retry('failed')` — argument is the current state of the job (required since BullMQ v4)
+- Gives the job one additional attempt, doesn't reset to original `attempts` value
+- For a full fresh set of retries, create a new job instead
+
+### Dead Letter Queue Pattern
+
+```
+processor fails → all attempts exhausted → worker.on('failed') detects attemptsMade >= attempts
+→ add job data to DLQ → original job stays in failed (or remove it)
+```
+
+- DLQ is just another Queue — no special BullMQ concept
+- Useful for: alerting ops team, batch retry later, auditing failure patterns
