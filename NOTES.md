@@ -184,3 +184,67 @@ processor fails → all attempts exhausted → worker.on('failed') detects attem
 
 - **Concurrency** — limit CPU/memory usage per worker, control DB connection pool usage
 - **Rate limiting** — respect external API limits (e.g., max 5 requests/sec to AMFI API), prevent thundering herd
+
+---
+
+## 6. Scheduled & Repeating Jobs
+
+### Key Concepts
+
+- **Job Schedulers** (v5.16+) replace old `repeat` option. Use `queue.upsertJobScheduler()`.
+- A scheduler is a **template** — each trigger creates a NEW independent job instance.
+- `upsert` = idempotent. Calling again with same ID updates the scheduler (no duplicates).
+- A new job is only produced when the previous one **starts processing** — no pile-up if queue is backed up.
+
+### Two Scheduling Modes
+
+| Mode | Option | Example |
+|------|--------|---------|
+| Interval | `{ every: 5000 }` | Every 5 seconds |
+| Cron | `{ pattern: '*/10 * * * * *' }` | Every 10s (6-field cron with seconds) |
+| Cron (standard) | `{ pattern: '0 18 * * 1-5' }` | Weekdays at 6 PM |
+
+### API
+
+```ts
+// Create/update scheduler
+await queue.upsertJobScheduler('id', { every: 5000 }, {
+  name: 'job-name',
+  data: { ... },
+  opts: { attempts: 3, backoff: { type: 'exponential', delay: 1000 } },
+});
+
+// List all schedulers
+const schedulers = await queue.getJobSchedulers(0, 10, true);
+
+// Remove a scheduler
+await queue.removeJobScheduler('id');
+```
+
+### Scheduler Object (from getJobSchedulers)
+
+```ts
+{
+  key: 'scheduler-id',       // your ID
+  name: 'job-name',          // job template name
+  next: 1782750162872,       // next trigger (unix ms)
+  iterationCount: 4,         // jobs produced so far
+  every: 5000,               // interval (or pattern for cron)
+  offset: 0,                 // internal alignment
+  template: { data: {...} }  // job template data
+}
+```
+
+### Backpressure Behavior
+
+- If processor takes longer than the interval, BullMQ does NOT pile up jobs.
+- Next job is only produced when previous starts processing.
+- Effective interval = max(configured interval, processing time).
+- Prevents queue flooding when workers are slow or backed up.
+
+### Cron Syntax
+
+- Standard 5-field: `minute hour day-of-month month day-of-week`
+- Extended 6-field (BullMQ): `second minute hour day-of-month month day-of-week`
+- Minimum granularity: 1 second (with 6-field), 1 minute (standard 5-field)
+- For sub-minute intervals, prefer `every` over cron.
