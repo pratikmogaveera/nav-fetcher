@@ -47,7 +47,7 @@ nav-fetcher/
 - [x] 2. Basic Queue + Worker
 - [x] 3. Job Options (delay, priority, attempts, backoff)
 - [x] 4. Retries & Error Handling
-- [ ] 5. Concurrency & Rate Limiting
+- [x] 5. Concurrency & Rate Limiting
 - [ ] 6. Scheduled & Repeating Jobs
 - [ ] 7. Job Progress & Events
 - [ ] 8. Multiple Queues & Flows (FlowProducer)

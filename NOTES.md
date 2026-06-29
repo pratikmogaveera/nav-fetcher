@@ -150,3 +150,37 @@ processor fails → all attempts exhausted → worker.on('failed') detects attem
 
 - DLQ is just another Queue — no special BullMQ concept
 - Useful for: alerting ops team, batch retry later, auditing failure patterns
+
+---
+
+## 5. Concurrency & Rate Limiting
+
+### Key Concepts
+
+- **Concurrency** = how many jobs one worker processes simultaneously (parallel promises). Set on `Worker` options: `{ concurrency: 5 }`.
+- **Rate limiting** = how many jobs can START processing per time window. Global across all workers on the queue.
+- Two ways to set rate limit:
+  - `Worker` options: `{ limiter: { max: 10, duration: 1000 } }` (original approach)
+  - `Queue` method: `await queue.setGlobalRateLimit(10, 1000)` (newer, dynamic)
+- Both achieve the same thing — global rate limiting. `setGlobalRateLimit` separates concerns better.
+- Rate limiting controls jobs moving from `waiting → active`, NOT jobs being added to the queue.
+
+### Mental Model
+
+- **Rate limit** = gate at the entrance (how fast jobs can enter processing)
+- **Concurrency** = room capacity (how many can be inside at once)
+- The stricter one wins
+
+### Observed Behavior
+
+| Config | 10 jobs (1s processor) | Bottleneck |
+|--------|----------------------|------------|
+| concurrency: 1 | ~10s | Concurrency |
+| concurrency: 5 | ~2s | Concurrency |
+| concurrency: 5, rate: 2/sec | ~5s | Rate limit |
+| concurrency: 3, rate: 5/sec | 3 jobs/sec | Concurrency |
+
+### Production Use Cases
+
+- **Concurrency** — limit CPU/memory usage per worker, control DB connection pool usage
+- **Rate limiting** — respect external API limits (e.g., max 5 requests/sec to AMFI API), prevent thundering herd
