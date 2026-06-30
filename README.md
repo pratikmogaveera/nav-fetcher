@@ -49,7 +49,7 @@ nav-fetcher/
 - [x] 4. Retries & Error Handling
 - [x] 5. Concurrency & Rate Limiting
 - [x] 6. Scheduled & Repeating Jobs
-- [ ] 7. Job Progress & Events
+- [x] 7. Job Progress & Events
 - [ ] 8. Multiple Queues & Flows (FlowProducer)
 - [ ] 9. Bull Board UI
 - [ ] 10. Mini Project: NAV Fetcher System

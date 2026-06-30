@@ -248,3 +248,56 @@ await queue.removeJobScheduler('id');
 - Extended 6-field (BullMQ): `second minute hour day-of-month month day-of-week`
 - Minimum granularity: 1 second (with 6-field), 1 minute (standard 5-field)
 - For sub-minute intervals, prefer `every` over cron.
+
+---
+
+## 7. Job Progress & Events
+
+### Key Concepts
+
+- **`job.updateProgress(value)`** — report progress from inside processor. Accepts number OR any JSON-serializable object.
+- **`QueueEvents`** — separate class using Redis pub/sub for real-time lifecycle event streaming. Requires its own Redis connection.
+- **Return values** — whatever the processor returns is serialized to Redis and available via `job.returnvalue` or `completed` event.
+- **Separation of concerns** — processor does work + reports progress silently. `QueueEvents` listeners handle logging/observability externally.
+
+### Event Listeners (QueueEvents)
+
+| Event | Fires when | Payload |
+|-------|-----------|---------|
+| `progress` | `job.updateProgress()` called | `{ jobId, data }` — data is whatever you passed |
+| `completed` | Processor returns successfully | `{ jobId, returnvalue }` |
+| `failed` | All attempts exhausted | `{ jobId, failedReason }` |
+| `waiting` | Job enters waiting state | `{ jobId, prev }` |
+| `active` | Worker picks up job | `{ jobId, prev }` |
+
+### Structured Progress Pattern
+
+```ts
+interface JobProgress {
+  completed: number;
+  total: number;
+  current: string | number;
+}
+
+// Inside processor:
+job.updateProgress({ completed: i + 1, total: items.length, current: item.id });
+
+// In listener (cast needed since TS types it as number | object):
+const progress = data as JobProgress;
+```
+
+### `QueueEvents` vs `worker.on()`
+
+| | `QueueEvents` | `worker.on()` |
+|---|---|---|
+| Connection | Separate Redis pub/sub connection | Same as worker |
+| Scope | Observes all jobs on the queue | Only jobs this worker processed |
+| `failed` fires | Only on final failure | Every attempt |
+| Use case | External monitoring, UI, alerting | In-process handling (DLQ routing) |
+
+### Notes
+
+- `QueueEvents` must be closed when done — holds a Redis connection open
+- Return values are stored in Redis — keep them small (status/summary, not full data)
+- Progress is stored on the job object — queryable anytime via `job.progress`
+- Bull Board reads progress and return values for its UI display

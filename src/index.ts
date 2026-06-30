@@ -1,48 +1,61 @@
-import { Queue, Worker } from "bullmq";
+import { Job, Queue, QueueEvents, Worker } from "bullmq";
 
 const connection = { host: "localhost", port: 6379 };
 const QUEUE_NAME = "nav-fetch";
+
+const FUND_CODES: Record<"code", number>[] = [
+  { code: 12345 },
+  { code: 32187 },
+  { code: 47289 },
+  { code: 68497 },
+  { code: 23593 },
+];
+
+// Structured progress type for type-safe progress reporting
+interface JobProgress {
+  completed: number;
+  total: number;
+  current: number;
+}
+
 const ts = () => new Date().toLocaleTimeString();
 
 const queue = new Queue(QUEUE_NAME, { connection });
 await queue.obliterate({ force: true });
 
+// Worker: processes jobs and reports structured progress
 const worker = new Worker(
   QUEUE_NAME,
-  async (job) => {
-    console.log(`[${ts()}] Processing: ${job.name} | data: ${JSON.stringify(job.data)}`);
+  async (job: Job<typeof FUND_CODES>) => {
+    for (const [index, data] of job.data.entries()) {
+      await new Promise((r) => setTimeout(r, 1000));
+      job.updateProgress({
+        completed: index + 1,
+        total: job.data.length,
+        current: data.code,
+      });
+    }
+    return { success: true, fetched: job.data.length };
   },
   { connection },
 );
 
+// QueueEvents: real-time lifecycle observer via Redis pub/sub
+const queueEvents = new QueueEvents(QUEUE_NAME, { connection });
+
+queueEvents.on("progress", ({ jobId, data }) => {
+  const progress = data as JobProgress;
+  const pct = Math.round((progress.completed / progress.total) * 100);
+  console.log(
+    `[${ts()}] [Progress] Job:${jobId} — ${pct}% (${progress.completed}/${progress.total}) | current: ${progress.current}`,
+  );
+});
+
+queueEvents.on("completed", ({ jobId, returnvalue }) => {
+  console.log(`[${ts()}] [Completed] Job:${jobId}`, returnvalue);
+});
+
 await worker.waitUntilReady();
-console.log(`[${ts()}] Ready.\n`);
+await queueEvents.waitUntilReady();
 
-// Interval-based scheduler: every 5 seconds
-queue.upsertJobScheduler(
-  "interval-scheduler",
-  { every: 5000 },
-  { name: "interval-job", data: { source: "interval" } },
-);
-
-// Cron-based scheduler: every 10 seconds
-queue.upsertJobScheduler(
-  "cron-scheduler",
-  { pattern: "*/10 * * * * *" },
-  { name: "cron-job", data: { source: "cron" } },
-);
-
-// List schedulers after 12s, then remove and confirm
-await new Promise<void>((r) =>
-  setTimeout(async () => {
-    const schedulers = await queue.getJobSchedulers(0, 10, true);
-    console.log("\nActive schedulers:", schedulers.map((s) => s.key));
-
-    await queue.removeJobScheduler("interval-scheduler");
-    await queue.removeJobScheduler("cron-scheduler");
-
-    const remaining = await queue.getJobSchedulers(0, 10, true);
-    console.log("After removal:", remaining);
-    r();
-  }, 12000),
-);
+queue.add("nav-fetch", FUND_CODES);
